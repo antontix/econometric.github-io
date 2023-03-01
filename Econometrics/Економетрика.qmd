@@ -1,0 +1,168 @@
+---
+title: "Лабораторна робота №2"
+subtitle: "Економетрика"
+author: "Урадовський Антон IE-202"
+date: 3/01/2023
+format: 
+  html:
+    toc: true
+    code-fold: true
+language: _language-ukr.yml
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup-03, echo = FALSE, purl = FALSE, cache = FALSE, include=FALSE}
+knitr::opts_knit$set(global.par = TRUE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, collapse = TRUE, out.width = '100%', cache = TRUE)
+```
+
+
+```{r}
+#| label: setup
+#| include: false
+
+library(tidyverse)
+library(ggplot2)
+data(iris)
+```
+
+
+# 1.Числові змінні
+Обираємо дві числові змінні з предзавантаженого набору даних. Для цієї роботи було обрано набір даних `iris`.
+В ньому представлено 5 параметрів квітки `Sepal.Length , Sepal.Width , Petal.Length , Petal.Width ,Species`.
+
+```{r}
+#| echo: false
+head(iris)
+```
+
+З нього ми визначемо *залежну змінну* - `Sepal.Width` і *незалежну змінну* - `Sepal.Length`
+
+---
+## 1.1 Впорядковуємо дані для нашої задачі
+
+```{r}
+W_H <- iris %>%
+  select(-Petal.Length,-Petal.Width)
+tibble(W_H)
+```
+
+# 2.Точкова діаграма
+
+Спочатку візуалізуємо нашу підвибірку
+Cтворюємо точкову діаграму,яка показує залежність довжини чашолистка від ширини чашолистка.
+Кожна точка на графіку де вісь **x** вказує на довжину чашолистка, а вісь **у** вказує на ширину чашолистка.
+
+```{r}
+W_H %>% 
+ggplot(aes( Sepal.Length, Sepal.Width)) +
+  geom_point() +
+  labs(x = "Sepal.Length",
+       y = "Sepal.Width" )
+```
+
+Бачимо тенденцію до збільшення ширини зі збільшенням довжини.Також є точки які сильно відрізняються.
+
+Далі проводимо пряму,що відповідає середьому ширини чашолистка та робимо прямі лінії , які позначають позитивні та від'ємні відхилення
+
+```{r}
+W_H %>% 
+  mutate(fit1 = mean(Sepal.Width),
+         resid1 = Sepal.Width - fit1) %>% 
+  ggplot(aes(Sepal.Length, Sepal.Width)) +
+  geom_point() +
+  geom_hline(aes(yintercept = mean(Sepal.Width)), color = "blue") +
+  geom_segment(aes(xend = Sepal.Length, yend = fit1), alpha = 0.2, color = "red") + 
+  labs(x = "Sepal.Length",
+       y = "Sepal.Width" )
+```
+
+Далі можемо бачити, що червоні сегменти представляють залишки кожної точки даних від середнього значення. Точки даних розкидані по всьому графіку і не демонструють сильного зв’язку між цими змінними. Є мінливість залишків, що свідчить про те, що лінійна модель може не найкраще підходити для наших даних.
+
+
+# 3.Розрахуємо коефіцієнт кореляції
+
+```{r}
+cor(W_H$Sepal.Length, W_H$Sepal.Width)
+```
+
+Коефіцієнт кореляції між 'Sepal.Length' і 'Sepal.Width' становить -0,118. Це означає, що між цими двома змінними слабка негативна кореляція.
+
+# 4.Модель простої лінійної регресії
+
+## 4.1.Без функції lm
+
+Наше рівняння має такий вигляд: 
+
+$$
+Width_i = \beta_0 + \beta_1Length_i + u_i
+$$
+Оцінки параметрів моделі $\hat{\beta_0}$ та $\hat{\beta_1}$ будуть дорівнювати:
+
+$$
+\left\{\begin{matrix}
+\hat{\beta_0} = \overline{y} - \hat{\beta_1}\overline{x} & \\ 
+\hat{\beta_1} = \frac{\sum\limits^{n}_{i=1}(x_i - \overline{x})(y_i - \overline{y})}{\sum\limits^{n}_{i=1}(x_i - \overline{x})^2} = \frac{\overline{xy} - \overline{x}\overline{y}}{\overline{x^2} - \overline{x}^2}
+\end{matrix}\right.
+$$
+
+
+Далі розраховуємо $\hat{\beta_0}$ та $\hat{\beta_1}$
+
+```{r}
+W_H %>%
+  select(Sepal.Length, Sepal.Width) %>% 
+  mutate(Sepal.Length_sq = Sepal.Length ^ 2,
+         Lenght_Width = Sepal.Length * Sepal.Width) %>%  #додаємо значення
+  summarise(across(Sepal.Length:Lenght_Width,
+                   mean,
+                   .names = "mean_{.col}")) %>% #знаходимо середнє для всіх стовпчиків
+  transmute(beta_1 = (mean_Lenght_Width - mean_Sepal.Length * mean_Sepal.Width)/(mean_Sepal.Length_sq - mean_Sepal.Length^2),
+            beta_0 = mean_Sepal.Width - beta_1 * mean_Sepal.Length) 
+#розраховуємо оцінки параметрів моделі за рівнянням та використанням ф-ції transnutate яка працює як mutate ,але не повертає наші початкові дані
+```
+
+Рівняння простої лінійної регресії : 
+$$\hat{y_i} = -0.06188 + 3.41895 * \hat{x}$$
+
+## 4.2.З функцією lm
+
+Тепер знайдемо її за допомогою функції `lm`
+
+```{r}
+iris_lm <- lm(Sepal.Width ~ Sepal.Length, data = iris)
+iris_lm
+```
+
+
+Рівняння простої лінійної регресії : 
+$$\hat{y_i} = -0.06188  + 3.41895 * \hat{x}$$
+Як бачимо, порівнюючи роботи без та з використанням `lm` ми отримали однакові результати,але для того щоб зробити лінійну регресію самому потрібно набагато більше часу навідміну від декількох строчок коду при використанні ф-ції `lm`. Можемо зробити висновок , що це дуже зручний інструмент який полгшує нашу роботу та рахує за такою ж точністю.Але враховуючи людський фактор вона може обробити наш запит точніше.
+
+# 5.Відображаємо лінію регресії
+
+```{r}
+W_H %>% 
+  ggplot(aes( Sepal.Length, Sepal.Width)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Sepal.Length",
+       y = "Sepal.Width" )
+```
+
+# 6.Інтерпретація β0 та β1
+
+Параметри моделі відносяться до значень beta_0 і beta_1 у рівнянні лінійної регресії:
+
+$y = beta_0 + beta_1*x$
+
+У контексті наого набору даних `iris` параметри моделі оцінюють зв’язок між змінними `Sepal Length` та `Sepal Width`.
+
+**beta_0** це відрізок, який є значенням залежної змінної (`Sepal Width`), коли незалежна змінна (`Sepal Length`) дорівнює нулю - оцінка  beta_0 становить приблизно 3,4189, що означає, що коли довжина чашолистка дорівнює нулю, очікувана ширина чашолистка становитиме близько 3,4189 одиниць.
+
+**beta_1** представляє нахил лінії регресії, який відображає, наскільки змінюється залежна змінна (`Sepal Width`) для  збільшення незалежної змінної (довжина чашолистка). У цьому випадку оцінка нахилу beta_1 становить приблизно -0.06188, а це означає, що для кожної одиниці довжини чашолистка очікувана ширина чашолистка буде зменьшуватися на -0.06188 одиниці.
+Ці оцінки ми отримали за допомогою методу найменших квадратів, метою якого є знаходження лінії, яка найкраще відповідає даним.
+
+
+
